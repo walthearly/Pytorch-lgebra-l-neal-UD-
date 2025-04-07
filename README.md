@@ -3,85 +3,112 @@ Universidad distrital Francisco José de Caldas
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchtext.datasets import IMDB
-from torchtext.data.utils import get_tokenizer
-from torchtext.vocab import build_vocab_from_iterator
+from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-from torch.nn.utils.rnn import pad_sequence
+import matplotlib.pyplot as plt
 
-# 1. Tokenizador y vocabulario
-tokenizer = get_tokenizer('basic_english')
+# 1. Cargar el conjunto de datos MNIST
+transformacion = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,))
+])
 
-def yield_tokens(data_iter):
-    for label, text in data_iter:
-        yield tokenizer(text)
+dataloader = DataLoader(
+    datasets.MNIST('./datos', train=True, download=True, transform=transformacion),
+    batch_size=128, shuffle=True
+)
 
-train_iter = IMDB(split='train')
-vocab = build_vocab_from_iterator(yield_tokens(train_iter), specials=["<unk>"])
-vocab.set_default_index(vocab["<unk>"])
-
-# 2. Procesamiento de datos
-def process(text):
-    return torch.tensor(vocab(tokenizer(text)), dtype=torch.long)
-
-label_map = {"neg": 0, "pos": 1}
-
-def collate_batch(batch):
-    texts, labels = [], []
-    for label, text in batch:
-        texts.append(process(text))
-        labels.append(torch.tensor(label_map[label], dtype=torch.long))
-    texts = pad_sequence(texts, batch_first=True)
-    labels = torch.tensor(labels)
-    return texts, labels
-
-train_iter, test_iter = IMDB(split='train'), IMDB(split='test')
-train_loader = DataLoader(list(train_iter), batch_size=16, shuffle=True, collate_fn=collate_batch)
-test_loader = DataLoader(list(test_iter), batch_size=16, shuffle=False, collate_fn=collate_batch)
-
-# 3. Modelo LSTM
-class SentimentLSTM(nn.Module):
-    def __init__(self, vocab_size, embed_dim, hidden_dim, output_dim):
+# 2. Definimos el Generador
+class Generador(nn.Module):
+    def __init__(self, dimension_ruido=100):
         super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.lstm = nn.LSTM(embed_dim, hidden_dim, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.red = nn.Sequential(
+            nn.Linear(dimension_ruido, 256),
+            nn.ReLU(True),
+            nn.Linear(256, 512),
+            nn.ReLU(True),
+            nn.Linear(512, 28 * 28),
+            nn.Tanh()
+        )
 
-    def forward(self, x):
-        embedded = self.embedding(x)
-        _, (hidden, _) = self.lstm(embedded)
-        return self.fc(hidden[-1])
+    def forward(self, z):
+        return self.red(z).view(-1, 1, 28, 28)
 
-model = SentimentLSTM(len(vocab), embed_dim=64, hidden_dim=128, output_dim=2)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
+# 3. Definimos el Discriminador
+class Discriminador(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.red = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(28 * 28, 512),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(256, 1),
+            nn.Sigmoid()
+        )
 
-# 4. Entrenamiento
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+    def forward(self, imagen):
+        return self.red(imagen)
 
-for epoch in range(3):
-    model.train()
-    total_loss = 0
-    for text, label in train_loader:
-        text, label = text.to(device), label.to(device)
-        optimizer.zero_grad()
-        output = model(text)
-        loss = criterion(output, label)
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
-    print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_loader):.4f}")
+# 4. Iniciamos los modelos
+dispositivo = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+generador = Generador().to(dispositivo)
+discriminador = Discriminador().to(dispositivo)
 
-# 5. Evaluación
-model.eval()
-correct, total = 0, 0
-with torch.no_grad():
-    for text, label in test_loader:
-        text, label = text.to(device), label.to(device)
-        output = model(text)
-        _, predicted = torch.max(output, 1)
-        correct += (predicted == label).sum().item()
-        total += label.size(0)
+# 5. Función de pérdida y optimizadores
+criterio = nn.BCELoss()
+optimizador_G = optim.Adam(generador.parameters(), lr=0.0002)
+optimizador_D = optim.Adam(discriminador.parameters(), lr=0.0002)
 
-print(f"Precisión en test: {100 * correct / total:.2f}%")
+# 6. Entrenamiento
+dimension_ruido = 100
+
+for epoca in range(5):
+    for imagenes_reales, _ in dataloader:
+        imagenes_reales = imagenes_reales.to(dispositivo)
+        tamano_lote = imagenes_reales.size(0)
+
+        # Etiquetas para entrenamiento
+        reales = torch.ones(tamano_lote, 1).to(dispositivo)
+        falsas = torch.zeros(tamano_lote, 1).to(dispositivo)
+
+        # --- Entrenamos el Discriminador ---
+        z = torch.randn(tamano_lote, dimension_ruido).to(dispositivo)
+        imagenes_falsas = generador(z)
+
+        perdida_real = criterio(discriminador(imagenes_reales), reales)
+        perdida_falsa = criterio(discriminador(imagenes_falsas.detach()), falsas)
+        perdida_D = perdida_real + perdida_falsa
+
+        optimizador_D.zero_grad()
+        perdida_D.backward()
+        optimizador_D.step()
+
+        # --- Entrenamos el Generador ---
+        z = torch.randn(tamano_lote, dimension_ruido).to(dispositivo)
+        imagenes_generadas = generador(z)
+        salida_discriminador = discriminador(imagenes_generadas)
+        perdida_G = criterio(salida_discriminador, reales)  # Queremos engañar al discriminador
+
+        optimizador_G.zero_grad()
+        perdida_G.backward()
+        optimizador_G.step()
+
+    print(f"Época {epoca+1} - Pérdida D: {perdida_D.item():.4f}, Pérdida G: {perdida_G.item():.4f}")
+
+    # Visualizamos algunas imágenes generadas
+    with torch.no_grad():
+        z_muestra = torch.randn(16, dimension_ruido).to(dispositivo)
+        imagenes = generador(z_muestra).cpu()
+        imagenes = imagenes.view(-1, 1, 28, 28)
+
+        plt.figure(figsize=(4, 4))
+        for i in range(16):
+            plt.subplot(4, 4, i + 1)
+            plt.imshow(imagenes[i].squeeze(), cmap='gray')
+            plt.axis('off')
+        plt.tight_layout()
+        plt.show()
+
+
