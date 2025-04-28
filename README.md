@@ -1,66 +1,57 @@
-# Pytorch-lgebra-l-neal-UD-
-Universidad distrital Francisco José de Caldas 
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 
-# Definición de la red neuronal simple
-class SimpleNN(nn.Module):
-    def __init__(self):
-        super(SimpleNN, self).__init__()
-        # Capa de entrada con 28x28 (imagen MNIST)
-        self.fc1 = nn.Linear(28*28, 128)  # Primera capa lineal
-        self.fc2 = nn.Linear(128, 64)     # Segunda capa lineal
-        self.fc3 = nn.Linear(64, 10)      # Capa de salida (10 clases)
+# Suma de matrices
+def sumar_matrices(matriz1, matriz2):
+    return matriz1 + matriz2
 
-    def forward(self, x):
-        x = x.view(-1, 28*28)  # Aplanar la imagen
-        x = torch.relu(self.fc1(x))  # Activación ReLU
-        x = torch.relu(self.fc2(x))
-        x = self.fc3(x)  # Salida sin activación (se hace softmax en la pérdida)
-        return x
+# Resta de matrices
+def restar_matrices(matriz1, matriz2):
+    return matriz1 - matriz2
 
-# Configuración de transformaciones para normalizar imágenes
-transform = transforms.Compose([
-    transforms.ToTensor(),  # Convertir las imágenes a tensores
-    transforms.Normalize((0.5,), (0.5,))  # Normalizar las imágenes
-])
+# Multiplicación de matrices
+def multiplicar_matrices(matriz1, matriz2):
+    return torch.matmul(matriz1, matriz2)
 
-# Cargar el dataset MNIST
-train_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+# Cálculo del determinante
+def calcular_determinante(matriz):
+    return torch.linalg.det(matriz)
 
-# Crear el modelo, la función de pérdida y el optimizador
-model = SimpleNN()
-criterion = nn.CrossEntropyLoss()  # Pérdida para clasificación multi-clase
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+# Cálculo de la inversa
+def calcular_inversa(matriz):
+    # Verificar si la matriz es invertible antes de calcular la inversa
+    if es_invertible(matriz):
+        return torch.linalg.inv(matriz)
+    else:
+        return "La matriz no es invertible."
 
-# Entrenamiento del modelo
-epochs = 5
-for epoch in range(epochs):
-    running_loss = 0.0
-    for i, (inputs, labels) in enumerate(train_loader):
-        optimizer.zero_grad()  # Borrar los gradientes de iteraciones previas
+# Verificar si una matriz es invertible
+def es_invertible(matriz):
+    if matriz.shape[0] != matriz.shape[1]:
+        return False  # Solo matrices cuadradas pueden ser invertidas
+    determinante = torch.linalg.det(matriz)
+    return not torch.isclose(determinante, torch.tensor(0.0))
 
-        # Forward pass
-        outputs = model(inputs)
-        
-        # Calcular la pérdida
-        loss = criterion(outputs, labels)
-        
-        # Backward pass y optimización
-        loss.backward()
-        optimizer.step()
+# Función de ejemplo para mostrar cómo usar estas funciones
+def ejemplo():
+    # Crear matrices de ejemplo
+    matriz1 = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    matriz2 = torch.tensor([[5.0, 6.0], [7.0, 8.0]])
 
-        # Estadísticas del entrenamiento
-        running_loss += loss.item()
-        if (i+1) % 100 == 0:
-            print(f'Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Loss: {running_loss/100:.4f}')
-            running_loss = 0.0
+    # Operaciones
+    print("Suma de matrices:")
+    print(sumar_matrices(matriz1, matriz2))
 
-print("Entrenamiento completado.")
+    print("\nResta de matrices:")
+    print(restar_matrices(matriz1, matriz2))
 
-# Guardar el modelo entrenado
-torch.save(model.state_dict(), 'modelo_mnist.pth')
+    print("\nMultiplicación de matrices:")
+    print(multiplicar_matrices(matriz1, matriz2))
+
+    print("\nDeterminante de matriz 1:")
+    print(calcular_determinante(matriz1))
+
+    print("\nInversa de matriz 1:")
+    print(calcular_inversa(matriz1))
+
+# Ejecutar ejemplo
+ejemplo()
