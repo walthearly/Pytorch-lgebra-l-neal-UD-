@@ -58,11 +58,6 @@ def ingresar_matriz():
         datos.append(fila)
     return torch.tensor(datos)
 
-# Función para ingresar un vector desde la entrada del usuario
-def ingresar_vector():
-    elementos = list(map(float, input("Ingrese los elementos del vector (separados por espacio): ").split()))
-    return torch.tensor(elementos)
-
 # Función para mostrar el menú de operaciones
 def menu():
     while True:
