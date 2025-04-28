@@ -45,18 +45,35 @@ def es_invertible(matriz):
     determinante = torch.linalg.det(matriz)
     return not torch.isclose(determinante, torch.tensor(0.0))
 
-# Función para ingresar una matriz desde la entrada del usuario
-def ingresar_matriz():
-    filas = int(input("Ingrese el número de filas de la matriz: "))
-    columnas = int(input("Ingrese el número de columnas de la matriz: "))
-    datos = []
-    print("Ingrese los elementos de la matriz:")
-    for i in range(filas):
-        fila = list(map(float, input(f"Ingrese los elementos de la fila {i + 1}: ").split()))
-        if len(fila) != columnas:
-            raise ValueError("La cantidad de elementos de la fila no coincide con el número de columnas.")
-        datos.append(fila)
-    return torch.tensor(datos)
+# Resolver un sistema de ecuaciones lineales
+def resolver_sistema_ecuaciones(matriz_coeficientes, vector_terminos):
+    if es_invertible(matriz_coeficientes):
+        try:
+            # Usamos la inversa de la matriz de coeficientes
+            solucion = torch.matmul(torch.linalg.inv(matriz_coeficientes), vector_terminos)
+            return solucion
+        except RuntimeError as e:
+            return f"Error al resolver el sistema de ecuaciones: {e}"
+    else:
+        return "La matriz de coeficientes no es invertible."
+
+# Función para ingresar un sistema de ecuaciones
+def ingresar_sistema_ecuaciones():
+    num_ecuaciones = int(input("Ingrese el número de ecuaciones en el sistema: "))
+    coeficientes = []
+    print("Ingrese los coeficientes de las ecuaciones (debe separar los valores por espacios):")
+    
+    for i in range(num_ecuaciones):
+        ecuacion = list(map(float, input(f"Ingrese los coeficientes de la ecuación {i + 1}: ").split()))
+        coeficientes.append(ecuacion)
+    
+    matriz_coeficientes = torch.tensor(coeficientes)
+    
+    # Ingresar los términos constantes (lado derecho de las ecuaciones)
+    vector_terminos = list(map(float, input("Ingrese los términos constantes (lado derecho) separados por espacios: ").split()))
+    vector_terminos = torch.tensor(vector_terminos)
+    
+    return matriz_coeficientes, vector_terminos
 
 # Función para mostrar el menú de operaciones
 def menu():
@@ -67,6 +84,7 @@ def menu():
         print("3. Multiplicación de matrices")
         print("4. Determinante de matriz")
         print("5. Inversa de la matriz")
+        print("6. Resolver sistema de ecuaciones lineales")
         print("0. Salir")
 
         opcion = input("Ingrese el número de la operación: ")
@@ -89,6 +107,9 @@ def menu():
         elif opcion == '5':
             matriz = ingresar_matriz()
             print(calcular_inversa(matriz))
+        elif opcion == '6':
+            matriz_coeficientes, vector_terminos = ingresar_sistema_ecuaciones()
+            print(resolver_sistema_ecuaciones(matriz_coeficientes, vector_terminos))
         elif opcion == '0':
             print("¡Hasta luego!")
             break
